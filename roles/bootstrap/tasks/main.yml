@@ -1,0 +1,41 @@
+# =============================================================================
+# roles/bootstrap/tasks/main.yml – Установка Python на "голые" хосты
+# Назначение: подготовка базовой среды, т.к. Ansible требует Python для модулей
+# =============================================================================
+---
+# 🔍 Шаг 1: Определяем семейство ОС через raw-команду (до установки Python)
+- name: 🕵️ Detect OS family (raw)
+  ansible.builtin.raw: |
+    if [ -f /etc/debian_version ]; then echo Debian;
+    elif [ -f /etc/redhat-release ]; then echo RedHat;
+    else echo Unknown; fi
+  register: _os_family_raw
+  changed_when: false        # Чтение, не изменение — не помечать как changed
+  check_mode: false          # Выполнять даже в dry-run (ansible-playbook --check)
+
+# 📋 Шаг 2: Сохраняем результат в fact для использования в условиях
+- name: 📋 Set OS family fact
+  ansible.builtin.set_fact:
+    detected_os_family: >-
+      {{ 'Debian' if 'Debian' in (_os_family_raw.stdout | default('')) else
+         'RedHat' if 'RedHat' in (_os_family_raw.stdout | default('')) else
+         'Unknown' }}
+  check_mode: false          # set_fact не должен пропускаться в check_mode
+
+# 🐧 Шаг 3: Установка Python для Debian-семейства
+- name: 🐧 Install Python (Debian-family)
+  ansible.builtin.raw: "{{ bootstrap_python_debian }}"
+  when: detected_os_family == "Debian"
+  changed_when: false        # raw-команды сложно детектить, безопаснее false
+  check_mode: false          # Установка пакетов не поддерживается в --check
+
+# 🐪 Шаг 4: Установка Python для RHEL-семейства
+- name: 🐪 Install Python (RedHat-family)
+  ansible.builtin.raw: "{{ bootstrap_python_redhat }}"
+  when: detected_os_family == "RedHat"
+  changed_when: false
+  check_mode: false
+
+# 📊 Шаг 5: Сбор фактов после установки Python (теперь Ansible может работать)
+- name: 📊 Gather facts after bootstrap
+  ansible.builtin.setup:     # Собираем ansible_os_family, ansible_memtotal_mb и т.д.

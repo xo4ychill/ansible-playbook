@@ -1,0 +1,186 @@
+# site.yml
+---
+- name: "🚀 Deploy Logging Stack"
+  hosts: all
+  gather_facts: true
+  become: true
+  tags: [always]
+  
+  pre_tasks:
+    - name: "📋 Вывод информации о хосте"
+      ansible.builtin.debug:
+        msg: |
+          🖥️  Хост: {{ inventory_hostname }}
+          🌐 IP: {{ ansible_host | default('N/A') }}
+          🐧 ОС: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          💾 RAM: {{ ansible_memtotal_mb }} MB
+      tags: [debug]
+
+# -----------------------------------------------------------------------------
+- name: "🗄️ Deploy ClickHouse"
+  hosts: clickhouse
+  become: true
+  serial: 1
+  tags: [clickhouse, database]
+  
+  roles:
+    - role: clickhouse
+      clickhouse_packages:
+        - clickhouse-server
+        - clickhouse-client
+        - clickhouse-common-static
+  
+  post_tasks:
+    - name: "🏥 Healthcheck: проверка доступности ClickHouse"
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host | default('127.0.0.1') }}:8123/ping"
+        return_content: true
+        status_code: 200
+        timeout: 10
+      register: _ch_health
+      retries: 5
+      delay: 3
+      until: (_ch_health.content | default('') | trim).lower() == 'ok.'
+      ignore_errors: false
+      tags: [healthcheck]
+
+    - name: "📊 Вывод версии ClickHouse"
+      ansible.builtin.command: >
+        clickhouse-client --query "SELECT version()"
+      register: _ch_version
+      changed_when: false
+      tags: [debug]
+    
+    - name: "📋 Debug: версия ClickHouse"
+      ansible.builtin.debug:
+        msg: "✅ ClickHouse version: {{ _ch_version.stdout }}"
+      tags: [debug]
+
+# -----------------------------------------------------------------------------
+- name: "📤 Deploy Vector Log Agent"
+  hosts: vector
+  become: true
+  tags: [vector, logging, agent]
+  
+  pre_tasks:
+    - name: "⏳ Ожидание готовности ClickHouse"
+      ansible.builtin.uri:
+        url: >-
+          http://{{ 
+            hostvars[groups['clickhouse'][0]].ch_host_ip 
+            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
+            else '127.0.0.1' 
+          }}:8123/ping
+        timeout: 5
+        status_code: 200
+      register: _ch_ping
+      retries: 10
+      delay: 3
+      until: _ch_ping.status == 200
+      when: 
+        - groups['clickhouse'] is defined
+        - groups['clickhouse'] | length > 0
+      tags: [dependency]
+  
+  roles:
+    - role: vector-role
+  
+  post_tasks:
+    - name: "✅ Проверка статуса Vector"
+      ansible.builtin.systemd:
+        name: vector
+        state: started
+      register: _vector_status
+      tags: [healthcheck]
+    
+    - name: "📋 Debug: статус Vector"
+      ansible.builtin.debug:
+        msg: "✅ Vector service: {{ _vector_status.status.ActiveState }}"
+      tags: [debug]
+
+# -----------------------------------------------------------------------------
+- name: "🌐 Deploy Lighthouse Web Interface"
+  hosts: lighthouse
+  become: true
+  tags: [lighthouse, web, ui]
+  
+  pre_tasks:
+    - name: "⏳ Ожидание ClickHouse для Lighthouse"
+      ansible.builtin.uri:
+        url: >-
+          http://{{ 
+            hostvars[groups['clickhouse'][0]].ch_host_ip 
+            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
+            else '127.0.0.1' 
+          }}:8123/ping
+        timeout: 5
+      register: _ch_ping_lh
+      retries: 10
+      delay: 3
+      until: _ch_ping_lh.status == 200
+      when: 
+        - groups['clickhouse'] is defined
+        - groups['clickhouse'] | length > 0
+      tags: [dependency]
+    
+    - name: "🔗 Настройка endpoint для Lighthouse"
+      ansible.builtin.set_fact:
+        lighthouse_clickhouse_host: >-
+          {{ 
+            hostvars[groups['clickhouse'][0]].ch_host_ip 
+            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
+            else '127.0.0.1' 
+          }}
+      tags: [config]
+  
+  roles:
+    - role: lighthouse-role
+  
+  post_tasks:
+    - name: "✅ Проверка доступности Lighthouse UI"
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host | default('127.0.0.1') }}/"
+        status_code: [200, 301, 302]
+        timeout: 10
+      register: _lh_health
+      retries: 3
+      delay: 2
+      until: _lh_health.status in [200, 301, 302]
+      tags: [healthcheck]
+    
+    - name: "📋 Debug: статус Lighthouse"
+      ansible.builtin.debug:
+        msg: "✅ Lighthouse UI доступен: http://{{ ansible_host | default('127.0.0.1') }}"
+      tags: [debug]
+
+# -----------------------------------------------------------------------------
+- name: "📋 Финальный отчёт"
+  hosts: localhost
+  gather_facts: false
+  become: false
+  tags: [summary, always]
+  
+  tasks:
+    - name: "🎉 Вывод статуса деплоя"
+      ansible.builtin.debug:
+        msg: |
+          ════════════════════════════════════════════════════
+          🚀 DEPLOYMENT COMPLETED SUCCESSFULLY!
+          ════════════════════════════════════════════════════
+          
+          🗄️  ClickHouse:
+             {% for host in groups['clickhouse'] | default([]) %}
+             • {{ host }} → http://{{ hostvars[host].ch_host_ip | default('N/A') }}:8123
+             {% endfor %}
+          
+          📤 Vector Agents:
+             {% for host in groups['vector'] | default([]) %}
+             • {{ host }} → {{ hostvars[host].ansible_host | default('N/A') }}
+             {% endfor %}
+          
+          🌐 Lighthouse UI:
+             {% for host in groups['lighthouse'] | default([]) %}
+             • {{ host }} → http://{{ hostvars[host].ansible_host | default('N/A') }}
+             {% endfor %}
+          ════════════════════════════════════════════════════
+      tags: [summary]

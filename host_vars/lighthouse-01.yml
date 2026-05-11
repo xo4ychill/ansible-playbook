@@ -1,0 +1,18 @@
+# =============================================================================
+# host_vars/lighthouse-01.yml — Хост-специфичные переменные для Lighthouse
+# =============================================================================
+---
+# 🌐 IP-адрес сервера с веб-интерфейсом
+lighthouse_host_ip: "51.250.1.216"
+
+# 🐧 Семейство ОС
+# ansible_os_family_override: "Debian"
+
+# 🌍 Кастомный домен для веб-интерфейса (если есть)
+# # 💡 Переопределяет дефолтный "_" в lighthouse_nginx_server_name
+# lighthouse_nginx_server_name: "logs.example.com"
+# 
+# # 🔐 SSL-сертификаты для HTTPS
+# lighthouse_ssl_enabled: true
+# lighthouse_ssl_cert: "/etc/letsencrypt/live/logs.example.com/fullchain.pem"
+# lighthouse_ssl_key: "/etc/letsencrypt/live/logs.example.com/privkey.pem"

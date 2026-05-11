@@ -1,0 +1,111 @@
+# =============================================================================
+# roles/system_tuning/tasks/main.yml – Оптимизация для маломощных ВМ
+# Назначение: swap, OOM-killer, лимиты памяти systemd
+# =============================================================================
+---
+# 🧠 Шаг 1: Сохраняем объём RAM в fact для условий
+- name: "🧠 Gather memory facts"
+  ansible.builtin.set_fact:
+    ram_mb: "{{ ansible_memtotal_mb }}"
+
+# -------------------------------------------------------------------------
+# 💾 Шаг 2: Проверка и создание swap-файла (если RAM < порога)
+# -------------------------------------------------------------------------
+- name: "Check if swap file exists"
+  ansible.builtin.stat:
+    path: /swapfile
+  register: swapfile_stat
+
+- name: "Create swap file (only if RAM < threshold)"
+  ansible.builtin.command: >
+    fallocate -l {{ tuning_swap_size }} /swapfile
+  when:
+    - ram_mb | int < tuning_low_memory_threshold_mb | int
+    - not swapfile_stat.stat.exists
+  register: swap_created
+  changed_when: swap_created.rc == 0
+
+- name: "Set secure permissions on swap file"
+  ansible.builtin.file:
+    path: /swapfile
+    mode: "0600"
+  when:
+    - ram_mb | int < tuning_low_memory_threshold_mb | int
+    - >-
+      swapfile_stat.stat.exists or
+      swap_created.changed | default(false)
+
+- name: "Format swap file (mkswap)"
+  ansible.builtin.command: mkswap /swapfile
+  when:
+    - ram_mb | int < tuning_low_memory_threshold_mb | int
+    - >-
+      swapfile_stat.stat.exists or
+      swap_created.changed | default(false)
+  args:
+    creates: /swapfile.swapdone
+
+- name: "Enable swap immediately (swapon)"
+  ansible.builtin.command: swapon /swapfile
+  when:
+    - ram_mb | int < tuning_low_memory_threshold_mb | int
+    - (ansible_swaptotal_mb | default(0) | int) == 0
+  register: swap_enable
+  changed_when: swap_enable.rc == 0
+  failed_when:
+    - swap_enable.rc != 0
+    - >-
+      'already in use' not in
+      (swap_enable.stderr | default(''))
+
+- name: "Persist swap in /etc/fstab"
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    line: "/swapfile none swap sw 0 0"
+    state: present
+    backup: true
+
+- name: "Mark swap as fully configured"
+  ansible.builtin.file:
+    path: /swapfile.swapdone
+    state: touch
+  when: ram_mb | int < tuning_low_memory_threshold_mb | int
+
+# -------------------------------------------------------------------------
+# 🛡️ Шаг 3: Настройка OOM-killer и swappiness
+# -------------------------------------------------------------------------
+- name: >-
+    Configure OOM killer: kill allocating task
+    (not random process)
+  ansible.builtin.sysctl:
+    name: vm.oom_kill_allocating_task
+    value: "{{ tuning_oom_kill_allocating_task }}"
+    state: present
+    reload: true
+
+- name: "Reduce swappiness: prefer RAM over swap"
+  ansible.builtin.sysctl:
+    name: vm.swappiness
+    value: "{{ tuning_swappiness }}"
+    state: present
+    reload: true
+
+# -------------------------------------------------------------------------
+# ⚙️ Шаг 4: Systemd memory limits
+# -------------------------------------------------------------------------
+- name: "Ensure systemd override directory exists"
+  ansible.builtin.file:
+    path: /etc/systemd/system.conf.d
+    state: directory
+    mode: "0755"
+
+- name: "Apply systemd memory tuning via drop-in"
+  ansible.builtin.copy:
+    dest: /etc/systemd/system.conf.d/memory.conf
+    mode: "0644"
+    content: |
+      [Manager]
+      DefaultMemoryLow={{ tuning_systemd_memory_low }}
+      DefaultMemoryHigh={{ tuning_systemd_memory_high }}
+  notify: reload systemd
+  

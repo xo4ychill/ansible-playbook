@@ -1,0 +1,13 @@
+# =============================================================================
+# roles/bootstrap/defaults/main.yml – Дефолты для роли bootstrap
+# Назначение: скрипты установки минимального Python для работы Ansible
+# =============================================================================
+---
+# 🐧 Debian/Ubuntu: установка python3-minimal + simplejson для фактов
+bootstrap_python_debian: |
+  apt-get update -y &&
+  apt-get install -y python3 python3-apt
+
+# 🐪 RHEL-family: поддержка как dnf, так и yum (для обратной совместимости)
+bootstrap_python_redhat: |
+  (dnf install -y python3 || yum install -y python3)

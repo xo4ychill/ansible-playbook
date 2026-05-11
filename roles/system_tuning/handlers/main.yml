@@ -1,0 +1,9 @@
+# =============================================================================
+# roles/system_tuning/handlers/main.yml – Обработчики для system_tuning
+# =============================================================================
+---
+# 🔄 Перезагрузка systemd для применения новых лимитов памяти
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true      # Перечитать юнит-файлы с диска
+    daemon_reexec: true      # Перезапустить менеджер systemd (применить memory.conf)
