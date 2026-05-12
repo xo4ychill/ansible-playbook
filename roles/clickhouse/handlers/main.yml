@@ -1,9 +1,10 @@
 # =============================================================================
-# roles/system_tuning/handlers/main.yml — Обработчики для system_tuning
+# roles/clickhouse/handlers/main.yml — Обработчики для ClickHouse
 # =============================================================================
 ---
-- name: reload systemd
+- name: Restart ClickHouse
   ansible.builtin.systemd:
+    name: clickhouse-server
+    state: restarted
     daemon_reload: true
-    daemon_reexec: true
-  listen: "reload systemd"
+  listen: "Restart ClickHouse"

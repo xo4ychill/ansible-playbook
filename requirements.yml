@@ -1,0 +1,32 @@
+# =============================================================================
+# requirements.yml — Внешние зависимости проекта
+# Назначение: установка коллекций Ansible Galaxy при необходимости
+# =============================================================================
+# 📦 Коллекции, которые могут понадобиться в будущем
+# collections:
+#   - name: community.general
+#     version: ">=7.0.0"
+#   - name: ansible.posix
+#     version: ">=1.5.0"
+
+# 🔄 Для установки: ansible-galaxy install -r requirements.yml
+# 💡 В текущем проекте все роли локальные — внешние зависимости не требуются
+---
+roles:
+  # Официальная ClickHouse role
+  - src: git@github.com:AlexeySetevoi/ansible-clickhouse.git
+    scm: git
+    version: "1.13"
+    name: clickhouse
+
+  # Vector role
+  - src: git@github.com:xo4ychill/vector-role.git
+    scm: git
+    version: "1.0.0"
+    name: vector-role
+
+  # Lighthouse role
+  - src: git@github.com:xo4ychill/lighthouse-role.git
+    scm: git
+    version: "1.0.0"
+    name: lighthouse-role

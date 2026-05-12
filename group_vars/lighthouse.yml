@@ -1,117 +1,64 @@
 # =============================================================================
 # group_vars/lighthouse.yml — Переменные для группы Lighthouse
-# Назначение: конфигурация Nginx, пути клонирования, порты, интеграции
-# Область применения: все хосты в группе [lighthouse] инвентаря
 # =============================================================================
 ---
 # -----------------------------------------------------------------------------
-# 📦 Пакеты для веб-сервера и контроля версий
+# 📦 Пакеты
 # -----------------------------------------------------------------------------
 lighthouse_packages:
-  - nginx                     # Веб-сервер + reverse proxy для статики и API
-  - git                       # Для клонирования репозитория Lighthouse
-  - curl                      # Утилиты для скриптов и healthcheck
-  - jq                        # Обработка JSON-ответов (опционально)
+  - nginx
+  - git
+  - curl
+  - jq
 
 # -----------------------------------------------------------------------------
-# 🗄️ Репозиторий и целевая директория для деплоя
+# 🗄️ Репозиторий и директория
 # -----------------------------------------------------------------------------
-# 🔗 Публичный репозиторий с исходным кодом Lighthouse UI
 lighthouse_repo: "https://github.com/xo4ychill/lighthouse.git"
-
-# 📁 Директория для развёртывания приложения (соответствует FHS)
 lighthouse_dir: "/opt/lighthouse"
-
-# 🏷️ Ветка/тег/коммит для деплоя
-# 💡 Для production рекомендуется фиксировать тег: "v1.0.0"
 lighthouse_version: "master"
 
 # -----------------------------------------------------------------------------
-# 🌐 Конфигурация Nginx (веб-сервер для Lighthouse UI)
+# 🌐 Конфигурация Nginx
 # -----------------------------------------------------------------------------
-# 🎧 Порт, на котором Nginx будет слушать запросы
 lighthouse_nginx_port: 80
-
-# 🌍 server_name: "_" ловит все запросы по IP (дефолтный server в Nginx)
-# 💡 Для production укажите реальный домен: "logs.example.com"
 lighthouse_nginx_server_name: "_"
-
-# 📁 Корневая директория для раздачи статических файлов (фронтенд)
 lighthouse_nginx_root: "{{ lighthouse_dir }}"
-
-# 📝 Директория для логов доступа и ошибок (отдельно для удобства мониторинга)
 lighthouse_nginx_log_dir: "/var/log/nginx/lighthouse"
 
-# 🔐 Security headers: защита от распространённых веб-уязвимостей
-lighthouse_security_headers:
-  X-Frame-Options: "SAMEORIGIN"           # Защита от clickjacking
-  X-Content-Type-Options: "nosniff"       # Запрет MIME-sniffing
-  X-XSS-Protection: "1; mode=block"       # Включение XSS-фильтра браузера
-  Referrer-Policy: "strict-origin-when-cross-origin"  # Контроль referrer
+lighthouse_nginx_security_headers:
+  X-Frame-Options: "SAMEORIGIN"
+  X-Content-Type-Options: "nosniff"
+  X-XSS-Protection: "1; mode=block"
+  Referrer-Policy: "strict-origin-when-cross-origin"
 
 # -----------------------------------------------------------------------------
-# 🔗 Интеграция с ClickHouse (для отображения данных в Lighthouse UI)
-# 💡 Имя хоста берётся динамически из инвентаря для гибкости
+# 🔗 Интеграция с ClickHouse
 # -----------------------------------------------------------------------------
-# 🌐 Хост ClickHouse: приоритет → hostvars → дефолт
-# 💡 Важно: имя хоста 'clickhouse-01' должно точно совпадать с inventory!
 lighthouse_clickhouse_host: >-
   {{ 
-    hostvars['clickhouse-01'].ch_host_ip 
-    if 'clickhouse-01' in hostvars and hostvars['clickhouse-01'].ch_host_ip is defined
+    hostvars[groups['clickhouse'][0]].ch_host_ip 
+    if (groups['clickhouse'] | default([]) | length > 0 and 
+        groups['clickhouse'][0] in hostvars and 
+        hostvars[groups['clickhouse'][0]].ch_host_ip is defined)
     else '127.0.0.1' 
   }}
 
-# 🎧 Порт HTTP-интерфейса ClickHouse
-lighthouse_clickhouse_port: 8123
-
-# 🗄️ База данных и таблица (наследуются из clickhouse.yml с дефолтами)
-lighthouse_clickhouse_database: "{{ hostvars['clickhouse-01'].clickhouse_database | default('logs') }}"
-lighthouse_clickhouse_table: "{{ hostvars['clickhouse-01'].clickhouse_table | default('events') }}"
-
-# 👤 Пользователь для подключения к БД
-lighthouse_clickhouse_user: "default"
-
-# 🔑 Пароль: наследуется из глобальной переменной
+lighthouse_clickhouse_port: "{{ clickhouse_http_port | default(8123) }}"
+lighthouse_clickhouse_database: "{{ clickhouse_database | default('logs') }}"
+lighthouse_clickhouse_table: "{{ clickhouse_table | default('events') }}"
+lighthouse_clickhouse_user: "{{ clickhouse_default_user | default('default') }}"
 lighthouse_clickhouse_password: "{{ clickhouse_password }}"
 
 # -----------------------------------------------------------------------------
-# 🌐 URL для API-запросов из браузера (через Nginx proxy)
-# 💡 Браузер делает запросы на /api/clickhouse, Nginx проксирует на реальную БД
-# Это обходит CORS и скрывает реальный адрес БД от клиента
+# 🌐 URL для API-запросов
 # -----------------------------------------------------------------------------
 lighthouse_clickhouse_api_url: "/api/clickhouse"
-
-# ⏱️ Таймауты для прокси-запросов к ClickHouse (аналитические запросы могут быть долгими)
-lighthouse_proxy_connect_timeout: 60s
-lighthouse_proxy_send_timeout: 60s
-lighthouse_proxy_read_timeout: 60s
+lighthouse_proxy_timeout: 60
 
 # -----------------------------------------------------------------------------
-# 🎨 Настройки фронтенда (передаются в config.js)
+# 🎨 Настройки интерфейса
 # -----------------------------------------------------------------------------
-# 🔄 Интервал авто-обновления дашборда в миллисекундах
-lighthouse_refresh_interval: 30000  # 30 секунд
-
-# 🎨 Тема интерфейса: 'light' или 'dark'
-lighthouse_theme: 'light'
-
-# 🌍 Часовой пояс для отображения временных меток
-lighthouse_timezone: 'UTC'
-
-# -----------------------------------------------------------------------------
-# 🚀 Дополнительные опции (раскомментировать при необходимости)
-# -----------------------------------------------------------------------------
-# # 🔐 Включить Basic Auth для защиты UI (опционально)
-# lighthouse_basic_auth_enabled: false
-# lighthouse_basic_auth_user: "admin"
-# lighthouse_basic_auth_password: "{{ lookup('env', 'LIGHTHOUSE_PASSWORD') | default('admin', true) }}"
-# 
-# # 🌐 Включить HTTPS (требуется сертификат)
-# lighthouse_ssl_enabled: false
-# lighthouse_ssl_cert: "/etc/ssl/certs/lighthouse.crt"
-# lighthouse_ssl_key: "/etc/ssl/private/lighthouse.key"
-# 
-# # 📊 Настройки кэширования статики
-# lighthouse_cache_static: true
-# lighthouse_cache_duration: "30d"
+lighthouse_ui_refresh_interval: 30000
+lighthouse_ui_theme: "light"
+lighthouse_ui_timezone: "UTC"

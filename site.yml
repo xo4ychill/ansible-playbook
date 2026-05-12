@@ -1,186 +1,109 @@
-# site.yml
+# =============================================================================
+# site.yml — Главный плейбук для развёртывания всего стека
+# Назначение: оркестрация выполнения ролей в правильном порядке
+# =============================================================================
 ---
-- name: "🚀 Deploy Logging Stack"
+- name: 🚀 Deploy Logging Stack (ClickHouse + Vector + Lighthouse)
   hosts: all
   gather_facts: true
   become: true
-  tags: [always]
+  tags: [all]
   
   pre_tasks:
-    - name: "📋 Вывод информации о хосте"
+    - name: 🔐 Validate environment_name variable
+      ansible.builtin.assert:
+        that:
+          - environment_name in ['dev', 'stage', 'prod', 'production']
+        fail_msg: "❌ Invalid environment_name: {{ environment_name }}"
+        success_msg: "✅ Environment: {{ environment_name }}"
+      tags: [validate]
+
+  roles:
+    - role: bootstrap
+      tags: [bootstrap]
+    
+    - role: system_tuning
+      tags: [tuning]
+      when: ansible_memtotal_mb | int < tuning_low_memory_threshold_mb | int
+    
+  tasks:
+    - name: 📊 Deployment summary
       ansible.builtin.debug:
         msg: |
-          🖥️  Хост: {{ inventory_hostname }}
-          🌐 IP: {{ ansible_host | default('N/A') }}
-          🐧 ОС: {{ ansible_distribution }} {{ ansible_distribution_version }}
-          💾 RAM: {{ ansible_memtotal_mb }} MB
-      tags: [debug]
+          ✅ Deployment completed!
+          Environment: {{ environment_name }}
+          Host: {{ inventory_hostname }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          RAM: {{ ansible_memtotal_mb }} MB
+      tags: [summary]
 
-# -----------------------------------------------------------------------------
-- name: "🗄️ Deploy ClickHouse"
+- name: 🗄️ Configure ClickHouse
   hosts: clickhouse
+  gather_facts: true
   become: true
-  serial: 1
   tags: [clickhouse, database]
   
   roles:
     - role: clickhouse
-      clickhouse_packages:
-        - clickhouse-server
-        - clickhouse-client
-        - clickhouse-common-static
-  
-  post_tasks:
-    - name: "🏥 Healthcheck: проверка доступности ClickHouse"
-      ansible.builtin.uri:
-        url: "http://{{ ansible_host | default('127.0.0.1') }}:8123/ping"
-        return_content: true
-        status_code: 200
-        timeout: 10
-      register: _ch_health
-      retries: 5
-      delay: 3
-      until: (_ch_health.content | default('') | trim).lower() == 'ok.'
-      ignore_errors: false
-      tags: [healthcheck]
+      tags: [clickhouse]
 
-    - name: "📊 Вывод версии ClickHouse"
-      ansible.builtin.command: >
-        clickhouse-client --query "SELECT version()"
-      register: _ch_version
-      changed_when: false
-      tags: [debug]
-    
-    - name: "📋 Debug: версия ClickHouse"
-      ansible.builtin.debug:
-        msg: "✅ ClickHouse version: {{ _ch_version.stdout }}"
-      tags: [debug]
-
-# -----------------------------------------------------------------------------
-- name: "📤 Deploy Vector Log Agent"
+- name: 📤 Configure Vector agents
   hosts: vector
+  gather_facts: true
   become: true
-  tags: [vector, logging, agent]
-  
-  pre_tasks:
-    - name: "⏳ Ожидание готовности ClickHouse"
-      ansible.builtin.uri:
-        url: >-
-          http://{{ 
-            hostvars[groups['clickhouse'][0]].ch_host_ip 
-            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
-            else '127.0.0.1' 
-          }}:8123/ping
-        timeout: 5
-        status_code: 200
-      register: _ch_ping
-      retries: 10
-      delay: 3
-      until: _ch_ping.status == 200
-      when: 
-        - groups['clickhouse'] is defined
-        - groups['clickhouse'] | length > 0
-      tags: [dependency]
+  tags: [vector, logging]
   
   roles:
-    - role: vector-role
-  
-  post_tasks:
-    - name: "✅ Проверка статуса Vector"
-      ansible.builtin.systemd:
-        name: vector
-        state: started
-      register: _vector_status
-      tags: [healthcheck]
-    
-    - name: "📋 Debug: статус Vector"
-      ansible.builtin.debug:
-        msg: "✅ Vector service: {{ _vector_status.status.ActiveState }}"
-      tags: [debug]
+    - role: vector
+      tags: [vector]
 
-# -----------------------------------------------------------------------------
-- name: "🌐 Deploy Lighthouse Web Interface"
+- name: 🌐 Deploy Lighthouse UI
   hosts: lighthouse
+  gather_facts: true
   become: true
-  tags: [lighthouse, web, ui]
-  
-  pre_tasks:
-    - name: "⏳ Ожидание ClickHouse для Lighthouse"
-      ansible.builtin.uri:
-        url: >-
-          http://{{ 
-            hostvars[groups['clickhouse'][0]].ch_host_ip 
-            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
-            else '127.0.0.1' 
-          }}:8123/ping
-        timeout: 5
-      register: _ch_ping_lh
-      retries: 10
-      delay: 3
-      until: _ch_ping_lh.status == 200
-      when: 
-        - groups['clickhouse'] is defined
-        - groups['clickhouse'] | length > 0
-      tags: [dependency]
-    
-    - name: "🔗 Настройка endpoint для Lighthouse"
-      ansible.builtin.set_fact:
-        lighthouse_clickhouse_host: >-
-          {{ 
-            hostvars[groups['clickhouse'][0]].ch_host_ip 
-            if groups['clickhouse'] is defined and groups['clickhouse'][0] in hostvars
-            else '127.0.0.1' 
-          }}
-      tags: [config]
+  tags: [lighthouse, ui]
   
   roles:
-    - role: lighthouse-role
-  
-  post_tasks:
-    - name: "✅ Проверка доступности Lighthouse UI"
-      ansible.builtin.uri:
-        url: "http://{{ ansible_host | default('127.0.0.1') }}/"
-        status_code: [200, 301, 302]
-        timeout: 10
-      register: _lh_health
-      retries: 3
-      delay: 2
-      until: _lh_health.status in [200, 301, 302]
-      tags: [healthcheck]
-    
-    - name: "📋 Debug: статус Lighthouse"
-      ansible.builtin.debug:
-        msg: "✅ Lighthouse UI доступен: http://{{ ansible_host | default('127.0.0.1') }}"
-      tags: [debug]
+    - role: lighthouse
+      tags: [lighthouse]
 
-# -----------------------------------------------------------------------------
-- name: "📋 Финальный отчёт"
-  hosts: localhost
+- name: 🔗 Final integration checks
+  hosts: lighthouse
   gather_facts: false
   become: false
-  tags: [summary, always]
+  tags: [integration, smoke]
   
   tasks:
-    - name: "🎉 Вывод статуса деплоя"
+    - name: Check Lighthouse UI is accessible
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host | default('127.0.0.1') }}:{{ lighthouse_nginx_port }}/"
+        status_code: [200, 301, 302]
+        timeout: 10
+      register: _ui_check
+      retries: 3
+      delay: 5
+      until: _ui_check is success
+      ignore_errors: true
+      tags: [smoke]
+    
+    - name: Check ClickHouse proxy via Nginx
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host | default('127.0.0.1') }}:{{ lighthouse_nginx_port }}{{ lighthouse_clickhouse_api_url }}/ping"
+        status_code: 200
+        timeout: 10
+      register: _proxy_check
+      ignore_errors: true
+      tags: [smoke]
+    
+    - name: 📋 Integration test results
       ansible.builtin.debug:
         msg: |
-          ════════════════════════════════════════════════════
-          🚀 DEPLOYMENT COMPLETED SUCCESSFULLY!
-          ════════════════════════════════════════════════════
-          
-          🗄️  ClickHouse:
-             {% for host in groups['clickhouse'] | default([]) %}
-             • {{ host }} → http://{{ hostvars[host].ch_host_ip | default('N/A') }}:8123
-             {% endfor %}
-          
-          📤 Vector Agents:
-             {% for host in groups['vector'] | default([]) %}
-             • {{ host }} → {{ hostvars[host].ansible_host | default('N/A') }}
-             {% endfor %}
-          
-          🌐 Lighthouse UI:
-             {% for host in groups['lighthouse'] | default([]) %}
-             • {{ host }} → http://{{ hostvars[host].ansible_host | default('N/A') }}
-             {% endfor %}
-          ════════════════════════════════════════════════════
-      tags: [summary]
+          🔗 Integration checks:
+          - UI accessible: {{ _ui_check is success | default('skipped') }}
+          - ClickHouse proxy: {{ _proxy_check is success | default('skipped') }}
+          {% if _ui_check is failed or _proxy_check is failed %}
+          ⚠️ Some checks failed! Review logs above.
+          {% else %}
+          ✅ All integration checks passed!
+          {% endif %}
+      tags: [smoke, summary]

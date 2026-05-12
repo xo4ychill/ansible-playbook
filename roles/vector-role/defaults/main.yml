@@ -1,0 +1,8 @@
+# =============================================================================
+# roles/vector/defaults/main.yml — Дефолты для роли vector
+# =============================================================================
+---
+vector_config_template: "vector.toml.j2"
+vector_service_template: "vector.service.j2"
+vector_service_dest: "/etc/systemd/system/vector.service"
+vector_service_name: "vector"

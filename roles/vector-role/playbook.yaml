@@ -1,0 +1,11 @@
+# playbook.yml
+---
+- name: Deploy Vector agent
+  hosts: logging_hosts
+  become: true
+  
+  roles:
+    - role: vector-role
+      vector_clickhouse_endpoint: "http://clickhouse:8123"
+      vector_clickhouse_database: "logs"
+      vector_clickhouse_table: "events"

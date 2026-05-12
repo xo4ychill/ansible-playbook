@@ -1,122 +1,77 @@
 # =============================================================================
-# group_vars/all.yml — Глобальные переменные для всех хостов
-# Назначение: 
-#   • Централизованное управление безопасностью, зависимостями, тюнингом
-#   • Переопределяется в group_vars/<группа>.yml или host_vars/<хост>.yml
-# Порядок приоритета переменных:
-#   1. host_vars/<хост>.yml (наивысший)
-#   2. group_vars/<группа>.yml
-#   3. group_vars/all.yml (наинизший)
-#   4. inventory файл
-#   5. playbook vars
+# group_vars/all.yml — Глобальные дефолты для всех хостов
 # =============================================================================
 ---
 # -----------------------------------------------------------------------------
 # 🌍 Окружение и режимы работы
 # -----------------------------------------------------------------------------
-# 💡 Значение 'dev' отключает строгие проверки (можно переопределить через ENV)
-# Используется в условиях для включения/отключения отладочных функций
-environment_name: "{{ ansible_env.ENV | default('dev') }}"
-
-# 🔧 Режим отладки: включение подробного логирования
-debug_mode: "{{ true if environment_name in ['dev', 'stage'] else false }}"
+environment_name: "dev"
 
 # -----------------------------------------------------------------------------
-# 🛡️ Безопасность SSH и аутентификация
+# 🛡️ Безопасность SSH
 # -----------------------------------------------------------------------------
-# 🔐 Строгая проверка хост-ключей только в production-окружениях
-# • 'yes' — строгая проверка (требует предварительного добавления ключа)
-# • 'accept-new' — автоматически принимать новые ключи (удобно для dev)
-strict_host_checking: "{{ 'yes' if environment_name in ['prod', 'production'] else 'accept-new' }}"
+strict_host_checking: >-
+  {{ 
+    'yes' if environment_name in ['prod', 'production'] 
+    else 'accept-new' 
+  }}
 
-# 🔑 Путь к приватному SSH-ключу
-# 💡 Ed25519 — современный, безопасный и быстрый алгоритм (предпочтительнее RSA)
 ssh_key_path: "~/.ssh/id_ed25519"
-
-# 👤 Дефолтный пользователь для подключения
-# 💡 Настраивается под облачного провайдера (yc-user для Yandex Cloud, ubuntu для AWS и т.д.)
 default_ansible_user: "yc-user"
 
 # -----------------------------------------------------------------------------
 # 🌐 Сетевые настройки и таймауты
 # -----------------------------------------------------------------------------
-# ⏱️ Защита от "зависших" подключений в нестабильных сетях
-ansible_ssh_timeout: 30                   # Таймаут SSH-соединения (секунды)
-ansible_ssh_retries: 3                    # Количество повторных попыток при ошибке
-ansible_ssh_retries_delay: 5              # Пауза между попытками (секунды)
-
-# 🌍 Таймауты для HTTP-запросов (healthcheck, API)
-http_timeout: 30                          # Дефолтный таймаут для uri-модулей
-http_retries: 5                           # Повторные попытки для критичных проверок
+ansible_ssh_timeout: 30
+ansible_ssh_retries: 3
+ansible_ssh_retries_delay: 5
+network_timeout: 30
 
 # -----------------------------------------------------------------------------
-# 📦 Базовые пакеты (устанавливаются почти на всех хостах)
+# 📦 Базовые пакеты
 # -----------------------------------------------------------------------------
-# 💡 Эти пакеты нужны для работы Ansible-модулей и базовых утилит
 common_packages:
-  - curl                      # HTTP-клиент для скриптов и healthcheck
-  - gnupg                     # Управление GPG-ключами репозиториев
-  - ca-certificates           # Корневые сертификаты для безопасных HTTPS-соединений
-  - jq                        # JSON-парсер для обработки ответов API (опционально)
-  - vim                       # Текстовый редактор для отладки на хостах (опционально)
+  - curl
+  - gnupg
+  - ca-certificates
+  - apt-transport-https
+  - software-properties-common
+  - lsb-release
+  - jq
+  - vim
 
 # -----------------------------------------------------------------------------
-# 🔄 Bootstrap: установка минимального Python на "голые" ВМ
-# ⚠️ Важно: эти скрипты выполняются через raw-модуль ДО сбора фактов
-# 💡 Используются флаги -q/-qq для подавления вывода в логи Ansible
+# 🔄 Raw-скрипты для установки Python3
 # -----------------------------------------------------------------------------
-
-# 🐧 Debian/Ubuntu: минимальный набор для работы модулей Ansible
-# • python3-minimal — базовый интерпретатор
-# • python3-simplejson — для корректной работы модуля setup
 bootstrap_python_debian: |
-  apt-get update -qq && 
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-    python3-minimal \
-    python3-simplejson \
-    python3-apt
+  export DEBIAN_FRONTEND=noninteractive &&
+  apt-get update -qq &&
+  apt-get install -y -qq python3-minimal python3-simplejson curl ca-certificates &&
+  echo "Bootstrap completed at $(date)" >> /var/log/ansible/bootstrap.log
 
-# 🐪 RHEL/CentOS/AlmaLinux/Rocky: поддержка как yum, так и dnf
-# • python3-libselinux — для работы с SELinux (если включён)
 bootstrap_python_redhat: |
-  (dnf install -y -q python3 python3-libselinux 2>/dev/null || \
-   yum install -y -q python3 python3-libselinux 2>/dev/null)
+  (dnf install -y -q python3 python3-libselinux curl ca-certificates ||
+   yum install -y -q python3 python3-libselinux curl ca-certificates) &&
+  echo "Bootstrap completed at $(date)" >> /var/log/ansible/bootstrap.log
 
 # -----------------------------------------------------------------------------
-# 🧠 Системный тюнинг для маломощных ВМ (< 2GB RAM)
-# 💡 Эти настройки предотвращают OOM-killer и улучшают стабильность
+# 🧠 Параметры системного тюнинга
 # -----------------------------------------------------------------------------
-# 🎯 Порог RAM для включения оптимизаций (в мегабайтах)
 tuning_low_memory_threshold_mb: 2048
-
-# 💾 Размер swap-файла при нехватке памяти
-# • Формат: строка с суффиксом (K/M/G) для fallocate
+tuning_swap_file: "/swapfile"
 tuning_swap_size: "2G"
-
-# ⚡ Приоритет использования RAM над swap
-# • 0 = избегать swap, 100 = агрессивно использовать
-# • Значение 10 — баланс между производительностью и стабильностью
+tuning_swap_permissions: "0600"
 tuning_swappiness: 10
-
-# 🔥 Поведение OOM-killer: убивать процесс-источник, а не случайный
-# • 1 = убивать задачу, которая вызвала нехватку памяти
 tuning_oom_kill_allocating_task: 1
-
-# 📊 Systemd memory limits для защиты критичных сервисов
-# • memory_low — мягкий порог: сервис получает приоритет при нехватке
-# • memory_high — жёсткий порог: после него начинается троттлинг
+tuning_oom_panic: 0
 tuning_systemd_memory_low: "500M"
 tuning_systemd_memory_high: "2G"
+tuning_systemd_memory_max: "4G"
 
 # -----------------------------------------------------------------------------
 # 🔐 Глобальные настройки безопасности
 # -----------------------------------------------------------------------------
-# 🗝️ Путь к Ansible Vault-файлу (если используется)
-# 💡 Задаётся через ENV или CLI: --vault-password-file=~/.vault_pass
-# ansible_vault_password_file: "{{ lookup('env', 'ANSIBLE_VAULT_PASSWORD_FILE') | default('', true) }}"
-
-# 📁 Директория для временных файлов на контроллере
-controller_tmp_dir: "/tmp/ansible-controller"
-
-# 🗑️ Автоматическая очистка временных файлов после выполнения
-cleanup_tmp_after_run: true
+security_disable_tls_1_0: true
+security_disable_tls_1_1: true
+security_rsa_min_bits: 4096
+security_audit_enabled: "{{ environment_name in ['prod', 'production'] }}"

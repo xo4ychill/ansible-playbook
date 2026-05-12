@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!-- =============================================================================
+     ClickHouse configuration template
+     Файл: roles/clickhouse/templates/config.xml.j2
+     Назначение: базовая конфигурация сервера ClickHouse
+     ============================================================================= -->
+<yandex>
+    <!-- 🌐 Сетевые настройки -->
+    <listen_host>{{ clickhouse_listen_host | default('0.0.0.0') }}</listen_host>
+    <http_port>{{ clickhouse_http_port | default(8123) }}</http_port>
+    <tcp_port>{{ clickhouse_tcp_port | default(9000) }}</tcp_port>
+    <max_connections>{{ clickhouse_max_connections | default(100) }}</max_connections>
+
+    <!-- 💾 Пути к данным и логам -->
+    <path>{{ clickhouse_data_path | default('/var/lib/clickhouse') }}/</path>
+    <tmp_path>{{ clickhouse_data_path | default('/var/lib/clickhouse') }}/tmp/</tmp_path>
+    <user_files_path>{{ clickhouse_data_path | default('/var/lib/clickhouse') }}/user_files/</user_files_path>
+    <format_schema_path>{{ clickhouse_data_path | default('/var/lib/clickhouse') }}/format_schemas/</format_schema_path>
+    
+    <logger>
+        <level>information</level>
+        <log>{{ clickhouse_log_path | default('/var/log/clickhouse-server') }}/clickhouse-server.log</log>
+        <errorlog>{{ clickhouse_log_path | default('/var/log/clickhouse-server') }}/clickhouse-server.err.log</errorlog>
+        <size>1000M</size>
+        <count>10</count>
+    </logger>
+
+    <!-- 🔐 Пользователи и доступ -->
+    <users_config>users.xml</users_config>
+    <default_profile>default</default_profile>
+    <default_database>default</default_database>
+
+    <!-- ⚙️ Оптимизации для production -->
+    {% if environment_name in ['prod', 'production'] %}
+    <max_server_memory_usage_to_ram_ratio>0.9</max_server_memory_usage_to_ram_ratio>
+    <merge_tree>
+        <parts_to_delay_insert>150</parts_to_delay_insert>
+        <parts_to_throw_insert>300</parts_to_throw_insert>
+    </merge_tree>
+    {% endif %}
+
+    <!-- 🧪 Development режим -->
+    {% if clickhouse_development_mode %}
+    <logger>
+        <level>debug</level>
+    </logger>
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <flush_interval_milliseconds>1500</flush_interval_milliseconds>
+    </query_log>
+    {% endif %}
+</yandex>

@@ -1,0 +1,147 @@
+# =============================================================================
+# roles/lighthouse/tasks/main.yml — Установка Lighthouse UI + Nginx
+# =============================================================================
+---
+- name: 📦 Install required packages
+  ansible.builtin.package:
+    name: "{{ lighthouse_packages }}"
+    state: present
+    update_cache: true
+  register: _packages_installed
+  tags: [lighthouse, packages]
+
+- name: Reload systemd daemon after package installation
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: _packages_installed is changed
+  tags: [lighthouse, systemd]
+
+- name: Check if lighthouse repo is accessible
+  ansible.builtin.uri:
+    url: "{{ lighthouse_repo | regex_replace('.git$', '') }}/archive/refs/heads/{{ lighthouse_version }}.tar.gz"
+    method: HEAD
+    timeout: "{{ network_timeout }}"
+    status_code: [200, 301, 302]
+  register: _repo_check
+  failed_when: false
+  changed_when: false
+  tags: [lighthouse, git]
+
+- name: Clone Lighthouse repository
+  ansible.builtin.git:
+    repo: "{{ lighthouse_repo }}"
+    dest: "{{ lighthouse_dir }}"
+    version: "{{ lighthouse_version }}"
+    update: true
+    force: true
+  when: _repo_check.status | default(0) in [200, 301, 302]
+  notify: reload nginx
+  register: _lighthouse_clone
+  retries: 2
+  delay: 5
+  until: _lighthouse_clone is success
+  ignore_errors: true
+  tags: [lighthouse, git]
+
+- name: Debug git clone failure
+  ansible.builtin.debug:
+    msg: |
+      ❌ Git clone failed:
+      - Repo: {{ lighthouse_repo }}
+      - Dest: {{ lighthouse_dir }}
+      - Error: {{ _lighthouse_clone.msg | default('unknown') }}
+  when: _lighthouse_clone is failed
+  tags: [lighthouse, debug]
+
+- name: Deploy Lighthouse config.js
+  ansible.builtin.template:
+    src: "{{ lighthouse_config_template }}"
+    dest: "{{ lighthouse_config_dest }}"
+    mode: "0644"
+    owner: root
+    group: root
+  notify: reload nginx
+  tags: [lighthouse, config]
+
+- name: 📁 Create nginx log directory
+  ansible.builtin.file:
+    path: "{{ lighthouse_nginx_log_dir }}"
+    state: directory
+    owner: www-data
+    group: adm
+    mode: "0755"
+  tags: [lighthouse, nginx]
+
+- name: Deploy Nginx configuration
+  ansible.builtin.template:
+    src: "{{ lighthouse_nginx_template }}"
+    dest: "{{ lighthouse_nginx_dest }}"
+    mode: "0644"
+  notify: reload nginx
+  tags: [lighthouse, nginx]
+
+- name: Symlink lighthouse config to sites-enabled
+  ansible.builtin.file:
+    src: "{{ lighthouse_nginx_dest }}"
+    dest: "{{ lighthouse_nginx_enabled }}"
+    state: link
+    force: true
+  notify: reload nginx
+  tags: [lighthouse, nginx]
+
+- name: Remove default nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: reload nginx
+  tags: [lighthouse, nginx]
+
+- name: 🔍 Validate full Nginx configuration
+  ansible.builtin.command: nginx -t
+  register: _nginx_config_test
+  changed_when: false
+  failed_when: _nginx_config_test.rc != 0
+  tags: [lighthouse, nginx, validate]
+
+- name: 🚨 Debug Nginx config error
+  ansible.builtin.debug:
+    msg: "❌ Nginx config test failed: {{ _nginx_config_test.stderr }}"
+  when: _nginx_config_test.rc != 0
+  tags: [lighthouse, nginx, debug]
+
+- name: Check if nginx service exists
+  ansible.builtin.command: systemctl list-unit-files nginx.service
+  register: _nginx_service_check
+  changed_when: false
+  failed_when: false
+  tags: [lighthouse, nginx]
+
+- name: Enable and start Nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+    daemon_reload: true
+  register: _nginx_start
+  retries: 3
+  delay: 5
+  until: _nginx_start is success
+  ignore_errors: true
+  tags: [lighthouse, nginx, service]
+
+- name: Debug nginx startup failure
+  ansible.builtin.debug:
+    msg: |
+      ❌ Failed to start nginx via systemd.
+      - Service file exists: {{ _nginx_service_check.rc == 0 }}
+      - Nginx binary: {{ lookup('pipe', 'which nginx', errors='ignore') | default('not found') }}
+  when: _nginx_start is failed
+  tags: [lighthouse, nginx, debug]
+
+- name: Start nginx via direct command (if systemd fails)
+  ansible.builtin.command: nginx
+  args:
+    creates: /var/run/nginx.pid
+  when: _nginx_start is failed
+  ignore_errors: true
+  tags: [lighthouse, nginx, fallback]

@@ -1,0 +1,10 @@
+# =============================================================================
+# roles/clickhouse/defaults/main.yml — Дефолты для роли clickhouse
+# =============================================================================
+---
+# Переопределяются в group_vars/clickhouse.yml
+# Здесь только внутренние переменные роли
+
+clickhouse_config_template: "config.xml.j2"
+clickhouse_config_dest: "/etc/clickhouse-server/config.xml"
+clickhouse_service_name: "clickhouse-server"

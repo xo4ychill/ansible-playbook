@@ -1,87 +1,63 @@
 # =============================================================================
-# inventory/prod.yml — Production инвентарь для Ansible
-# Назначение: определение групп хостов по ролям и передача глобальных переменных
-# 💡 Все чувствительные данные (пароли, ключи) вынесены в group_vars/host_vars
+# inventory/prod.yml — Инвентарь для production-окружения
 # =============================================================================
 ---
 all:
-  # ---------------------------------------------------------------------------
-  # 🌍 Глобальные переменные для ВСЕХ хостов
-  # Приоритет: переопределяются в group_vars/<группа>.yml или host_vars/<хост>.yml
-  # ---------------------------------------------------------------------------
   vars:
-    # 👤 SSH-аутентификация
-    ansible_user: "{{ default_ansible_user | default('yc-user') }}"  # Пользователь по умолчанию
-    ansible_become: true                  # Выполнять задачи с sudo
+    ansible_user: "{{ default_ansible_user | default('yc-user') }}"
+    ansible_become: true
     ansible_ssh_private_key_file: "{{ ssh_key_path | default('~/.ssh/id_ed25519') }}"
     
-    # 🔐 Проверка хост-ключей: строгая в prod, мягкая в dev
     ansible_ssh_common_args: >-
       -o StrictHostKeyChecking={{ strict_host_checking | default('accept-new') }}
-      -o UserKnownHostsFile=/dev/null
-    
-    # 🐍 Универсальный путь к Python3 (совместимо с современными ОС)
+      -o UserKnownHostsFile={{ 
+        '~/.ssh/known_hosts' if environment_name in ['prod', 'production'] 
+        else '/dev/null' 
+      }}
+
     ansible_python_interpreter: /usr/bin/python3
-    
-    # 🔐 Пароль ClickHouse: приоритет → переменная окружения → безопасный дефолт
-    # ⚠️ В production используйте Ansible Vault или external secrets manager!
-    clickhouse_password: "{{ lookup('env', 'CLICKHOUSE_PASSWORD') | default('changeme', true) }}"
-    
-    # 🌐 Идентификатор окружения (влияет на строгость настроек)
+
+    clickhouse_password: >-
+      {{ 
+        lookup('env', 'CLICKHOUSE_PASSWORD') | 
+        default(vault_clickhouse_password | default('CHANGE_ME_IN_VAULT', true), true) 
+      }}
+
     environment_name: "{{ ansible_env.ENV | default('dev') }}"
-    
-    # 📦 Путь к интерпретатору Python (для bootstrap)
-    python_interpreter_path: /usr/bin/python3
 
   children:
-    # =========================================================================
-    # 🗄️ ГРУППА: clickhouse — Сервер базы данных (RHEL/Debian family)
-    # =========================================================================
     clickhouse:
       hosts:
         clickhouse-01:
-          # 💡 IP-адрес берётся из host_vars/clickhouse-01.yml (переменная ch_host_ip)
-          # Это позволяет менять IP в одном месте без правки инвентаря
           ansible_host: "{{ ch_host_ip }}"
-          # 🔌 Дополнительные хост-специфичные настройки при необходимости
-          # ansible_port: 2222  # Если SSH на нестандартном порту
+          ansible_connection: ssh
+          tags: [clickhouse, database, backend]
 
-    # =========================================================================
-    # 📤 ГРУППА: vector — Агент сбора логов (Ubuntu/Debian)
-    # =========================================================================
     vector:
       hosts:
         vector-01:
-          # Из host_vars/vector-01.yml
           ansible_host: "{{ vector_host_ip }}"
-          # 📝 Можно добавить хост-специфичные переменные:
-          # vector_custom_config: "special_value"
+          ansible_connection: ssh
+          tags: [vector, logging, agent]
 
-    # =========================================================================
-    # 🌐 ГРУППА: lighthouse — Веб-интерфейс (Debian/Ubuntu)
-    # =========================================================================
     lighthouse:
       hosts:
-        # Из host_vars/lighthouse-01.yml
         lighthouse-01:
           ansible_host: "{{ lighthouse_host_ip }}"
+          ansible_connection: ssh
+          tags: [lighthouse, ui, frontend]
 
-    # =========================================================================
-    # 🔄 ДОПОЛНИТЕЛЬНО: группы для оркестрации (опционально)
-    # =========================================================================
-    # Группа "logging_stack" включает все компоненты для удобного запуска
+    backend:
+      children:
+        clickhouse:
+        vector:
+    
+    frontend:
+      children:
+        lighthouse:
+    
     logging_stack:
       children:
         clickhouse:
         vector:
         lighthouse:
-    
-    # Группа "web_tier" для задач, связанных только с веб-компонентами
-    web_tier:
-      children:
-        lighthouse:
-    
-    # Группа "data_tier" для компонентов хранения данных
-    data_tier:
-      children:
-        clickhouse:

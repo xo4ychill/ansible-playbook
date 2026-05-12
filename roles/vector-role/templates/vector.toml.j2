@@ -1,0 +1,52 @@
+# =============================================================================
+# Vector configuration (production-ready)
+# Файл: roles/vector/templates/vector.toml.j2
+# =============================================================================
+
+# 📥 Источник: чтение логов из stdin
+[sources.stdin_logs]
+type = "stdin"
+decoding.codec = "json"
+
+# 🔄 Трансформации (опционально)
+{% if vector_transforms_enabled %}
+[transforms.parse_logs]
+type = "remap"
+inputs = ["stdin_logs"]
+source = '''
+  .parsed = parse_json!(.message)
+  del(.message)
+'''
+{% endif %}
+
+# 📤 Sink: отправка в ClickHouse
+[sinks.clickhouse]
+type = "clickhouse"
+inputs = [{% if vector_transforms_enabled %}"parse_logs"{% else %}"stdin_logs"{% endif %}]
+
+# Подключение к БД
+endpoint = "{{ vector_clickhouse_endpoint }}"
+database = "{{ vector_clickhouse_database }}"
+table = "{{ vector_clickhouse_table }}"
+
+# Аутентификация
+auth.username = "{{ vector_clickhouse_user }}"
+auth.password = "${CLICKHOUSE_PASSWORD:-{{ vector_clickhouse_password }}}"
+
+# Маппинг полей
+columns.timestamp = "timestamp"
+columns.message = "message"
+columns.level = "level"
+
+# Батчинг
+batch.max_events = {{ vector_batch_max_events }}
+batch.timeout_secs = {{ vector_batch_timeout_secs }}
+
+# 📁 Fallback для отладки
+{% if vector_fallback_enabled %}
+[sinks.file_debug]
+type = "file"
+inputs = [{% if vector_transforms_enabled %}"parse_logs"{% else %}"stdin_logs"{% endif %}]
+path = "{{ vector_output_path }}"
+encoding.codec = "json"
+{% endif %}

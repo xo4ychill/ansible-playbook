@@ -1,9 +1,10 @@
 # =============================================================================
-# roles/system_tuning/handlers/main.yml — Обработчики для system_tuning
+# roles/lighthouse/handlers/main.yml — Обработчики для Lighthouse
 # =============================================================================
 ---
-- name: reload systemd
+- name: reload nginx
   ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
     daemon_reload: true
-    daemon_reexec: true
-  listen: "reload systemd"
+  listen: "reload nginx"
