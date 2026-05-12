@@ -1,63 +1,60 @@
 # =============================================================================
-# inventory/prod.yml — Инвентарь для production-окружения
+# inventory.yml – Production inventory (без хардкода)
+# Назначение: определение групп хостов, назначение им ролей и передача 
+#             глобальных переменных. Все IP и чувствительные данные вынесены.
 # =============================================================================
----
+
 all:
-  vars:
-    ansible_user: "{{ default_ansible_user | default('yc-user') }}"
-    ansible_become: true
-    ansible_ssh_private_key_file: "{{ ssh_key_path | default('~/.ssh/id_ed25519') }}"
-    
-    ansible_ssh_common_args: >-
-      -o StrictHostKeyChecking={{ strict_host_checking | default('accept-new') }}
-      -o UserKnownHostsFile={{ 
-        '~/.ssh/known_hosts' if environment_name in ['prod', 'production'] 
-        else '/dev/null' 
-      }}
-
-    ansible_python_interpreter: /usr/bin/python3
-
-    clickhouse_password: >-
-      {{ 
-        lookup('env', 'CLICKHOUSE_PASSWORD') | 
-        default(vault_clickhouse_password | default('CHANGE_ME_IN_VAULT', true), true) 
-      }}
-
-    environment_name: "{{ ansible_env.ENV | default('dev') }}"
-
   children:
+    # -------------------------------------------------------------------------
+    # 🗄️ CLICKHOUSE (RHEL-family: AlmaLinux/Rocky/CentOS)
+    # -------------------------------------------------------------------------
     clickhouse:
       hosts:
         clickhouse-01:
+          # 💡 IP вынесен в host_vars/AlmaLinux.yml как ch_host_ip
           ansible_host: "{{ ch_host_ip }}"
+          ansible_python_interpreter: "{{ python_interpreter_path }}"
           ansible_connection: ssh
-          tags: [clickhouse, database, backend]
 
+    # -------------------------------------------------------------------------
+    # 📤 VECTOR (Ubuntu)
+    # -------------------------------------------------------------------------
     vector:
       hosts:
         vector-01:
           ansible_host: "{{ vector_host_ip }}"
+          ansible_python_interpreter: "{{ python_interpreter_path }}"
           ansible_connection: ssh
-          tags: [vector, logging, agent]
 
+    # -------------------------------------------------------------------------
+    # 🌐 LIGHTHOUSE (Debian)
+    # -------------------------------------------------------------------------
     lighthouse:
       hosts:
         lighthouse-01:
           ansible_host: "{{ lighthouse_host_ip }}"
+          ansible_python_interpreter: "{{ python_interpreter_path }}"
           ansible_connection: ssh
-          tags: [lighthouse, ui, frontend]
 
-    backend:
-      children:
-        clickhouse:
-        vector:
-    
-    frontend:
-      children:
-        lighthouse:
-    
-    logging_stack:
-      children:
-        clickhouse:
-        vector:
-        lighthouse:
+  # ===========================================================================
+  # GLOBAL VARIABLES – Переопределяются в group_vars/ и host_vars/
+  # ===========================================================================
+  vars:
+    # 👤 SSH-аутентификация
+    ansible_user: "{{ default_ansible_user | default('yc-user') }}"
+    ansible_become: true
+    ansible_ssh_private_key_file: "{{ ssh_key_path | default('~/.ssh/id_ed25519') }}"
+    # 💡 В production замените 'accept-new' на 'yes', а UserKnownHostsFile на реальный файл
+    ansible_ssh_common_args: >-
+      -o StrictHostKeyChecking={{ strict_host_checking | default('accept-new') }}
+      -o UserKnownHostsFile=/dev/null
+
+    # 🐍 Универсальный путь к Python3 (совместимо с RHEL 8+, Ubuntu 20+, Debian 11+)
+    python_interpreter_path: /usr/bin/python3
+
+    # 🔐 Пароль ClickHouse: приоритет переменной окружения, затем безопасный дефолт
+    clickhouse_password: "{{ lookup('env', 'CLICKHOUSE_PASSWORD') | default('changeme', true) }}"
+
+    # 🌐 Идентификатор окружения (dev/stage/prod)
+    environment_name: "{{ ansible_env.ENV | default('dev') }}"

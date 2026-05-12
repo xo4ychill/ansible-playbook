@@ -1,7 +1,5 @@
-# =============================================================================
-# roles/system_tuning/meta/main.yml – Метаданные роли
-# =============================================================================
 ---
+# Метаданные роли: зависимости, платформы, авторство
 galaxy_info:
   author: DevOps Team
   description: System tuning for low-memory VMs (swap, OOM, systemd limits)
@@ -14,4 +12,4 @@ galaxy_info:
       versions: [ "20.04", "22.04", "24.04" ]
     - name: Debian
       versions: [ "11", "12" ]
-dependencies: []  # Нет внешних зависимостей — роль автономна
+dependencies: []                     # Нет внешних зависимостей

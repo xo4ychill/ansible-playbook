@@ -1,77 +1,35 @@
 # =============================================================================
-# group_vars/all.yml — Глобальные дефолты для всех хостов
+# group_vars/all.yml – Глобальные дефолты для всех хостов
+# Назначение: централизованное управление безопасностью, зависимостями и 
+#             параметрами системного тюнинга. Переопределяется в группах/хостах.
 # =============================================================================
----
-# -----------------------------------------------------------------------------
-# 🌍 Окружение и режимы работы
-# -----------------------------------------------------------------------------
-environment_name: "dev"
 
-# -----------------------------------------------------------------------------
 # 🛡️ Безопасность SSH
-# -----------------------------------------------------------------------------
-strict_host_checking: >-
-  {{ 
-    'yes' if environment_name in ['prod', 'production'] 
-    else 'accept-new' 
-  }}
-
+strict_host_checking: "{{ 'yes' if environment_name in ['prod', 'production'] else 'accept-new' }}"
 ssh_key_path: "~/.ssh/id_ed25519"
 default_ansible_user: "yc-user"
 
-# -----------------------------------------------------------------------------
-# 🌐 Сетевые настройки и таймауты
-# -----------------------------------------------------------------------------
+# 🌐 Сетевые таймауты
 ansible_ssh_timeout: 30
 ansible_ssh_retries: 3
-ansible_ssh_retries_delay: 5
-network_timeout: 30
 
-# -----------------------------------------------------------------------------
-# 📦 Базовые пакеты
-# -----------------------------------------------------------------------------
+# 📦 Базовые пакеты, требуемые почти всегда (репозитории, сертификаты)
 common_packages:
   - curl
   - gnupg
   - ca-certificates
-  - apt-transport-https
-  - software-properties-common
-  - lsb-release
-  - jq
-  - vim
 
-# -----------------------------------------------------------------------------
-# 🔄 Raw-скрипты для установки Python3
-# -----------------------------------------------------------------------------
+# 🔄 Raw-скрипты для установки Python3 на "голые" VM
+# ⚠️ Используется -q/-qq для подавления вывода в лог Ansible
 bootstrap_python_debian: |
-  export DEBIAN_FRONTEND=noninteractive &&
-  apt-get update -qq &&
-  apt-get install -y -qq python3-minimal python3-simplejson curl ca-certificates &&
-  echo "Bootstrap completed at $(date)" >> /var/log/ansible/bootstrap.log
-
+  apt-get update -qq && apt-get install -y -qq python3-minimal python3-simplejson
 bootstrap_python_redhat: |
-  (dnf install -y -q python3 python3-libselinux curl ca-certificates ||
-   yum install -y -q python3 python3-libselinux curl ca-certificates) &&
-  echo "Bootstrap completed at $(date)" >> /var/log/ansible/bootstrap.log
+  yum install -y -q python3 python3-libselinux || dnf install -y -q python3 python3-libselinux
 
-# -----------------------------------------------------------------------------
 # 🧠 Параметры системного тюнинга
-# -----------------------------------------------------------------------------
-tuning_low_memory_threshold_mb: 2048
-tuning_swap_file: "/swapfile"
-tuning_swap_size: "2G"
-tuning_swap_permissions: "0600"
-tuning_swappiness: 10
-tuning_oom_kill_allocating_task: 1
-tuning_oom_panic: 0
-tuning_systemd_memory_low: "500M"
-tuning_systemd_memory_high: "2G"
-tuning_systemd_memory_max: "4G"
-
-# -----------------------------------------------------------------------------
-# 🔐 Глобальные настройки безопасности
-# -----------------------------------------------------------------------------
-security_disable_tls_1_0: true
-security_disable_tls_1_1: true
-security_rsa_min_bits: 4096
-security_audit_enabled: "{{ environment_name in ['prod', 'production'] }}"
+tuning_low_memory_threshold_mb: 2048  # Если RAM < 2GB → включаем swap
+tuning_swap_size: "2G"                # Размер swap-файла
+tuning_swappiness: 10                 # Приоритет RAM над swap (0-100)
+tuning_oom_kill_allocating_task: 1    # Убивать задачу-источник OOM, а не случайный процесс
+tuning_systemd_memory_low: "500M"     # Минимальная память для systemd юнитов
+tuning_systemd_memory_high: "2G"      # Мягкий лимит, после которого начинается троттлинг

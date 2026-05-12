@@ -1,20 +1,5 @@
 # =============================================================================
-# host_vars/vector-01.yml — Хост-специфичные переменные для Vector
+# host_vars/vector.yml – Хост-специфичные переменные для Vector
 # =============================================================================
----
-# 🌐 IP-адрес сервера с агентом сбора логов
-vector_host_ip: "111.88.253.218"
 
-# 🏷️ Семейство ОС
-ansible_os_family: "Debian"
-ansible_distribution: "Ubuntu"
-ansible_distribution_version: "22.04"
-
-# 📥 Источники логов для этого хоста (можно переопределить глобальные)
-vector_input_sources:
-  - type: "file"
-    path: "/var/log/syslog"
-    label: "syslog"
-  - type: "file" 
-    path: "/var/log/nginx/access.log"
-    label: "nginx_access"
+vector_host_ip: "46.21.246.91"

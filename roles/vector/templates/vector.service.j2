@@ -1,0 +1,26 @@
+[Unit]
+Description=Vector Log Agent
+Documentation=https://vector.dev/docs/
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vector
+Group=vector
+ExecStart={{ vector_install_dir }}/bin/vector --config {{ vector_config_file }}
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+# 🔐 Security Hardening (Systemd)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ vector_log_dir }} {{ vector_config_dir }}
+
+# 🔑 Переменные окружения для паролей (пробрасываются в процесс Vector)
+Environment="CLICKHOUSE_PASSWORD={{ lookup('env', 'CLICKHOUSE_PASSWORD') | default('', true) }}"
+
+[Install]
+WantedBy=multi-user.target

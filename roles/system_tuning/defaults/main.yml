@@ -1,10 +1,10 @@
-# =============================================================================
-# roles/system_tuning/defaults/main.yml — Дефолты для system_tuning
-# =============================================================================
 ---
-# Переопределяются в group_vars/all.yml
-# Здесь только внутренние переменные
+# Порог "слабой VM"
+system_min_ram_mb: 2048
 
-system_swap_fstab_entry: "/swapfile none swap sw 0 0"
-system_systemd_conf_dir: "/etc/systemd/system.conf.d"
-system_systemd_memory_conf: "{{ system_systemd_conf_dir }}/memory.conf"
+# Swap
+system_swap_size: 1024
+system_swap_file: /swapfile
+
+# Ограничение параллелизма
+system_serial: 1

@@ -1,0 +1,45 @@
+# =============================================================================
+# Nginx configuration for Lighthouse
+# Назначение: отдача статики, логирование, базовая HTTP-безопасность
+# =============================================================================
+# Генерируется из: roles/lighthouse/templates/lighthouse.nginx.j2
+# =============================================================================
+
+server {
+    listen {{ lighthouse_nginx_port }} default_server;
+    listen [::]:{{ lighthouse_nginx_port }} default_server;
+    server_name {{ lighthouse_nginx_server_name }};
+
+    root {{ lighthouse_nginx_root }};
+    index index.html;
+
+    # 📝 Логи
+    access_log {{ lighthouse_nginx_log_dir }}/access.log;
+    error_log {{ lighthouse_nginx_log_dir }}/error.log warn;
+
+    # 🗂️ Отдача статики
+    location / {
+        try_files $uri $uri/ =404;
+        autoindex off;
+    }
+
+    # 🗑️ Кэширование статики (опционально)
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # 🛡️ Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    server_tokens off;
+
+    # 🚫 Запрет доступа к скрытым файлам
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}

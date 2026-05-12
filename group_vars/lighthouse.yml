@@ -1,64 +1,21 @@
 # =============================================================================
-# group_vars/lighthouse.yml — Переменные для группы Lighthouse
+# group_vars/lighthouse.yml – Переменные для группы Lighthouse
+# Назначение: конфигурация Nginx, пути клонирования, порты
 # =============================================================================
----
-# -----------------------------------------------------------------------------
-# 📦 Пакеты
-# -----------------------------------------------------------------------------
+
+# 📦 Пакеты для веб-сервера и контроля версий
 lighthouse_packages:
   - nginx
   - git
   - curl
-  - jq
 
-# -----------------------------------------------------------------------------
-# 🗄️ Репозиторий и директория
-# -----------------------------------------------------------------------------
+# 🗄️ Репозиторий и целевая директория
 lighthouse_repo: "https://github.com/xo4ychill/lighthouse.git"
 lighthouse_dir: "/opt/lighthouse"
-lighthouse_version: "master"
+lighthouse_version: "master"  # Можно заменить на тег: "v1.0.0"
 
-# -----------------------------------------------------------------------------
-# 🌐 Конфигурация Nginx
-# -----------------------------------------------------------------------------
+# 🌐 Nginx конфигурация
 lighthouse_nginx_port: 80
-lighthouse_nginx_server_name: "_"
+lighthouse_nginx_server_name: "_"   # Ловит все запросы по IP
 lighthouse_nginx_root: "{{ lighthouse_dir }}"
 lighthouse_nginx_log_dir: "/var/log/nginx/lighthouse"
-
-lighthouse_nginx_security_headers:
-  X-Frame-Options: "SAMEORIGIN"
-  X-Content-Type-Options: "nosniff"
-  X-XSS-Protection: "1; mode=block"
-  Referrer-Policy: "strict-origin-when-cross-origin"
-
-# -----------------------------------------------------------------------------
-# 🔗 Интеграция с ClickHouse
-# -----------------------------------------------------------------------------
-lighthouse_clickhouse_host: >-
-  {{ 
-    hostvars[groups['clickhouse'][0]].ch_host_ip 
-    if (groups['clickhouse'] | default([]) | length > 0 and 
-        groups['clickhouse'][0] in hostvars and 
-        hostvars[groups['clickhouse'][0]].ch_host_ip is defined)
-    else '127.0.0.1' 
-  }}
-
-lighthouse_clickhouse_port: "{{ clickhouse_http_port | default(8123) }}"
-lighthouse_clickhouse_database: "{{ clickhouse_database | default('logs') }}"
-lighthouse_clickhouse_table: "{{ clickhouse_table | default('events') }}"
-lighthouse_clickhouse_user: "{{ clickhouse_default_user | default('default') }}"
-lighthouse_clickhouse_password: "{{ clickhouse_password }}"
-
-# -----------------------------------------------------------------------------
-# 🌐 URL для API-запросов
-# -----------------------------------------------------------------------------
-lighthouse_clickhouse_api_url: "/api/clickhouse"
-lighthouse_proxy_timeout: 60
-
-# -----------------------------------------------------------------------------
-# 🎨 Настройки интерфейса
-# -----------------------------------------------------------------------------
-lighthouse_ui_refresh_interval: 30000
-lighthouse_ui_theme: "light"
-lighthouse_ui_timezone: "UTC"

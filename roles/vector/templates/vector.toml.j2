@@ -1,0 +1,49 @@
+# =============================================================================
+# Vector configuration (production-ready)
+# Генерируется из Ansible template: vector.toml.j2
+# =============================================================================
+
+# 📥 Источники данных
+[sources.stdin_logs]
+type = "stdin"
+decoding.codec = "json"
+
+# 🔄 Трансформации (опционально, закомментировано)
+# [transforms.parse_logs]
+# type = "remap"
+# inputs = ["stdin_logs"]
+# source = '''
+#   .parsed = parse_json!(.message)
+#   del(.message)
+# '''
+
+# 📤 Sink: ClickHouse
+[sinks.clickhouse]
+type = "clickhouse"
+inputs = ["stdin_logs"]
+
+# Подключение
+endpoint = "{{ vector_clickhouse_endpoint }}"
+database = "{{ vector_clickhouse_database }}"
+table = "{{ vector_clickhouse_table }}"
+
+# 🔐 Аутентификация (пароль уже обработан в group_vars)
+auth.username = "{{ vector_clickhouse_user }}"
+auth.password = "{{ vector_clickhouse_password }}"
+
+# 📊 Маппинг колонок
+columns.timestamp = "timestamp"
+columns.message = "message"
+columns.level = "level"
+
+# 📦 Батчинг для оптимизации
+batch.max_events = {{ vector_batch_max_events }}
+batch.timeout_secs = {{ vector_batch_timeout_secs }}
+
+# 📁 Fallback sink для отладки (опционально)
+# [sinks.file_debug]
+# type = "file"
+# inputs = ["stdin_logs"]
+# path = "{{ vector_output_path }}"
+# encoding.codec = "json"
+# compression = "none"

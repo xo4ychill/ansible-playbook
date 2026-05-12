@@ -1,9 +1,0 @@
-# =============================================================================
-# roles/lighthouse/defaults/main.yml — Дефолты для роли lighthouse
-# =============================================================================
----
-lighthouse_config_template: "config.js.j2"
-lighthouse_config_dest: "{{ lighthouse_dir }}/config.js"
-lighthouse_nginx_template: "lighthouse.nginx.j2"
-lighthouse_nginx_dest: "{{ lighthouse_dir }}/lighthouse.conf"
-lighthouse_nginx_enabled: "/etc/nginx/sites-enabled/lighthouse.conf"

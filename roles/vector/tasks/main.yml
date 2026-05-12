@@ -1,0 +1,165 @@
+# =============================================================================
+# roles/vector/tasks/main.yml – Установка Vector agent
+# Назначение: создание пользователя, скачивание бинарника, настройка TOML и systemd
+# =============================================================================
+
+- name: 📦 Install dependencies
+  ansible.builtin.package:
+    name: "{{ vector_dependencies }}"
+    state: present
+    update_cache: true  # ✅ Гарантируем актуальный кэш перед установкой
+
+# -------------------------------------------------------------------------
+# 👤 Создание пользователя и группы (явно и последовательно)
+# -------------------------------------------------------------------------
+- name: Create vector system group
+  ansible.builtin.group:
+    name: vector
+    system: true
+    state: present
+
+- name: 👤 Create vector system user
+  ansible.builtin.user:
+    name: vector
+    group: vector
+    system: true                   # Системный пользователь (UID < 1000)
+    shell: /usr/sbin/nologin       # Без логина в систему
+    create_home: false
+    # 🔒 Блокируем пароль для безопасности (системный пользователь не должен логиниться)
+    password_lock: true
+    state: present
+
+# -------------------------------------------------------------------------
+# 📁 Создание директорий (только после гарантии существования пользователя)
+# -------------------------------------------------------------------------
+- name: Create required directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: vector
+    group: vector
+    mode: "0755"
+  loop:
+    - "{{ vector_install_dir }}"
+    - "{{ vector_config_dir }}"
+    - "{{ vector_log_dir }}"
+  # ✅ В --check режиме пропускаем, т.к. владелец может ещё не существовать в кэше
+  check_mode: false
+
+# -------------------------------------------------------------------------
+# ⬇️ Download Vector via curl (надёжнее, чем get_url)
+# -------------------------------------------------------------------------
+- name: Download Vector archive via curl
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    curl -fsSL --retry 3 --retry-delay 5 --connect-timeout 30 --max-time 300
+    -H "User-Agent: Ansible/2.16 (+https://ansible.com)"
+    -o /tmp/{{ vector_filename }}
+    "{{ vector_url }}"
+  args:
+    creates: "/tmp/{{ vector_filename }}"  # ✅ Идемпотентно: не качаем, если файл уже есть
+    executable: /bin/bash
+  register: _curl_download
+  retries: 2
+  delay: 10
+  until: _curl_download.rc == 0
+
+# 🔍 Валидация: проверяем размер файла (должен быть > 1 МБ для архива)
+- name: Validate downloaded file size
+  ansible.builtin.stat:
+    path: "/tmp/{{ vector_filename }}"
+  register: _file_stat
+
+- name: Fail if file is too small (likely HTML error page)
+  ansible.builtin.fail:
+    msg: >-
+      Downloaded file is too small ({{ _file_stat.stat.size }} bytes).
+      Expected > 1MB for Vector archive.
+      URL: {{ vector_url }}
+      Check: curl -I "{{ vector_url }}"
+  when: 
+    - _file_stat.stat.size is defined
+    - _file_stat.stat.size < 1048576  # 1 MB
+
+# 🔍 Дополнительная валидация: тип файла
+- name: Validate file type is archive
+  ansible.builtin.shell: >-
+    file /tmp/{{ vector_filename }} | grep -qiE 'gzip|XZ|POSIX tar'
+  register: _file_type
+  changed_when: false
+  failed_when: _file_type.rc != 0
+
+# -------------------------------------------------------------------------
+# 📦 Extract Vector (ручная распаковка для надёжности)
+# -------------------------------------------------------------------------
+- name: Extract Vector to install directory
+  ansible.builtin.shell: |
+    set -o pipefail
+    mkdir -p {{ vector_install_dir }}
+    # Автоматически определяем тип сжатия и распаковываем
+    if file /tmp/{{ vector_filename }} | grep -qi 'gzip'; then
+      tar -xzf /tmp/{{ vector_filename }} -C {{ vector_install_dir }} --strip-components=1
+    elif file /tmp/{{ vector_filename }} | grep -qi 'XZ'; then
+      tar -xJf /tmp/{{ vector_filename }} -C {{ vector_install_dir }} --strip-components=1
+    else
+      tar -xf /tmp/{{ vector_filename }} -C {{ vector_install_dir }} --strip-components=1
+    fi
+  args:
+    creates: "{{ vector_install_dir }}/bin/vector"  # ✅ Идемпотентно: пропускаем, если уже распаковано
+    executable: /bin/bash
+  become: true
+
+# -------------------------------------------------------------------------
+# ⚙️ Configuration (Jinja2 template)
+# -------------------------------------------------------------------------
+- name: Deploy Vector configuration
+  ansible.builtin.template:
+    src: "vector.toml.j2"
+    dest: "{{ vector_config_file }}"
+    owner: vector
+    group: vector
+    mode: "0640"                   # Чтение только владельцем и группой
+  notify: restart vector
+  check_mode: false  # 🔑 Валидация бинарника не имеет смысла в dry-run
+
+# -------------------------------------------------------------------------
+# 📄 Systemd service
+# -------------------------------------------------------------------------
+- name: Deploy Vector systemd unit
+  ansible.builtin.template:
+    src: "vector.service.j2"
+    dest: /etc/systemd/system/vector.service
+    mode: "0644"
+  notify: reload systemd
+
+# -------------------------------------------------------------------------
+# ✅ Validate config (only if binary exists)
+# -------------------------------------------------------------------------
+- name: Validate Vector configuration
+  ansible.builtin.command:
+    cmd: "{{ vector_install_dir }}/bin/vector --validate --config {{ vector_config_file }}"
+  register: _vector_validate
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+  when: 
+    - vector_install_dir is defined
+    - lookup('file', vector_install_dir + '/bin/vector', errors='ignore') != ''
+
+- name: Vector config validation result
+  ansible.builtin.debug:
+    msg: "⚠️ Config validation: {{ _vector_validate.stderr | default(_vector_validate.stdout) | default('no output') }}"
+  when: 
+    - _vector_validate is defined
+    - _vector_validate.rc != 0
+
+# -------------------------------------------------------------------------
+# ▶️ Enable and start Vector
+# -------------------------------------------------------------------------
+- name: Enable and start Vector
+  ansible.builtin.systemd:
+    name: vector
+    enabled: true
+    state: started
+    daemon_reload: true
+

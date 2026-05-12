@@ -1,59 +1,36 @@
 # =============================================================================
-# roles/bootstrap/tasks/main.yml — Установка Python на "голых" хостах
+# roles/bootstrap/tasks/main.yml – Установка Python на "голые" хосты
+# Назначение: подготовка базовой среды, т.к. Ansible требует Python для работы модулей
 # =============================================================================
----
+
 - name: 🕵️ Detect OS family (raw)
   ansible.builtin.raw: |
-    if [ -f /etc/debian_version ]; then 
-      echo "Debian"
-    elif [ -f /etc/redhat-release ]; then 
-      echo "RedHat"
-    else 
-      echo "Unknown"
-    fi
+    if [ -f /etc/debian_version ]; then echo Debian;
+    elif [ -f /etc/redhat-release ]; then echo RedHat;
+    else echo Unknown; fi
   register: _os_family_raw
-  changed_when: false
-  check_mode: false
-  timeout: "{{ bootstrap_raw_timeout }}"
-  retries: "{{ bootstrap_raw_retries }}"
-  delay: 5
+  changed_when: false              # Не помечать как changed (чтение, не изменение)
+  check_mode: false                # Выполнять даже в режиме dry-run
 
 - name: 📋 Set OS family fact
   ansible.builtin.set_fact:
     detected_os_family: >-
-      {{ 
-        'Debian' if 'Debian' in (_os_family_raw.stdout | default('')) else
-        'RedHat' if 'RedHat' in (_os_family_raw.stdout | default('')) else
-        'Unknown' 
-      }}
-  check_mode: false
-
-- name: 🚨 Validate detected OS family
-  ansible.builtin.assert:
-    that:
-      - detected_os_family in ['Debian', 'RedHat']
-    fail_msg: "❌ Не удалось определить семейство ОС: {{ detected_os_family }}"
-    success_msg: "✅ Обнаружено семейство ОС: {{ detected_os_family }}"
-  check_mode: false
+      {{ 'Debian' if 'Debian' in (_os_family_raw.stdout | default('')) else
+         'RedHat' if 'RedHat' in (_os_family_raw.stdout | default('')) else
+         'Unknown' }}
+  check_mode: false                # Важно: set_fact не должен пропускаться в check_mode
 
 - name: 🐧 Install Python (Debian-family)
   ansible.builtin.raw: "{{ bootstrap_python_debian }}"
   when: detected_os_family == "Debian"
   changed_when: false
   check_mode: false
-  timeout: "{{ bootstrap_raw_timeout }}"
-  register: _bootstrap_debian
 
 - name: 🐪 Install Python (RedHat-family)
   ansible.builtin.raw: "{{ bootstrap_python_redhat }}"
   when: detected_os_family == "RedHat"
   changed_when: false
   check_mode: false
-  timeout: "{{ bootstrap_raw_timeout }}"
-  register: _bootstrap_redhat
 
 - name: 📊 Gather facts after bootstrap
-  ansible.builtin.setup:
-  when: 
-    - detected_os_family in ['Debian', 'RedHat']
-    - (_bootstrap_debian is succeeded or _bootstrap_redhat is succeeded)
+  ansible.builtin.setup:           # Собираем ansible_os_family, ansible_memtotal_mb и т.д.

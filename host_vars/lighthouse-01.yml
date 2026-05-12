@@ -1,15 +1,5 @@
 # =============================================================================
-# host_vars/lighthouse-01.yml — Хост-специфичные переменные для Lighthouse
+# host_vars/lighthouse.yml – Хост-специфичные переменные для Lighthouse
 # =============================================================================
----
-# 🌐 IP-адрес сервера с веб-интерфейсом
-lighthouse_host_ip: "93.77.178.52"
 
-# 🏷️ Семейство ОС
-ansible_os_family: "Debian"
-ansible_distribution: "Ubuntu"
-ansible_distribution_version: "22.04"
-
-# 🌐 Доменное имя для доступа к UI (опционально, для SSL)
-lighthouse_domain: "logs.example.com"
-lighthouse_ssl_enabled: false  # Включить при настройке Let's Encrypt
+lighthouse_host_ip: "51.250.1.216"

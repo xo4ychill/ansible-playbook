@@ -1,0 +1,5 @@
+---
+vector_install_dir: /opt/vector
+vector_config: /etc/vector/vector.toml
+
+vector_url: https://packages.timber.io/vector/latest/vector-x86_64-unknown-linux-gnu.tar.gz

@@ -1,47 +1,31 @@
 # =============================================================================
-# group_vars/clickhouse.yml — Переменные для группы ClickHouse
+# group_vars/clickhouse.yml – Переменные для группы ClickHouse
+# Назначение: настройка репозиториев, пакетов, healthcheck и параметров БД
 # =============================================================================
----
-# -----------------------------------------------------------------------------
-# 📦 Репозитории
-# -----------------------------------------------------------------------------
+
+# 📦 Репозитории (идемпотентные)
 clickhouse_apt_repo: "https://packages.clickhouse.com/deb"
-clickhouse_apt_repo_key: "https://packages.clickhouse.com/deb/pubkey.gpg"
 clickhouse_rpm_repo_url: "https://packages.clickhouse.com/rpm/clickhouse.repo"
 
-# -----------------------------------------------------------------------------
 # 📦 Пакеты для установки
-# -----------------------------------------------------------------------------
 clickhouse_packages:
   - clickhouse-server
   - clickhouse-client
-  - clickhouse-common-static
 
-# -----------------------------------------------------------------------------
-# 🏥 Healthcheck endpoint
-# -----------------------------------------------------------------------------
+# 🏥 Healthcheck endpoint (локальный ping)
 clickhouse_health_url: "http://localhost:8123/ping"
 clickhouse_health_expected: "Ok.\n"
-clickhouse_health_timeout: 10
-clickhouse_health_retries: 15
-clickhouse_health_delay: 10
 
-# -----------------------------------------------------------------------------
 # 🔐 Настройки для интеграции с Vector
-# -----------------------------------------------------------------------------
 clickhouse_database: "logs"
 clickhouse_table: "events"
-clickhouse_protocol: "http"
-clickhouse_http_port: 8123
-clickhouse_tcp_port: 9000
-clickhouse_endpoint: "{{ clickhouse_protocol }}://{{ ansible_host | default('127.0.0.1') }}:{{ clickhouse_http_port }}"
+# 💡 ansible_host берётся из инвентаря хоста, формат http://IP:PORT
+clickhouse_endpoint: "http://{{ ansible_host | default('127.0.0.1') }}:8123"
 
-# -----------------------------------------------------------------------------
-# ⚙️ Дополнительные параметры
-# -----------------------------------------------------------------------------
+# ⚙️ Дополнительные параметры (можно расширить при необходимости)
 clickhouse_max_connections: 100
-clickhouse_listen_host: "0.0.0.0"
-clickhouse_data_path: "/var/lib/clickhouse"
-clickhouse_log_path: "/var/log/clickhouse-server"
-clickhouse_default_user: "default"
-clickhouse_development_mode: "{{ environment_name in ['dev', 'stage'] }}"
+clickhouse_listen_port: 8123
+clickhouse_tcp_port: 9000
+
+
+

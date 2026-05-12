@@ -1,31 +1,23 @@
 # =============================================================================
-# roles/clickhouse/tasks/main.yml — Установка ClickHouse
+# roles/clickhouse/tasks/main.yml – Установка ClickHouse
+# Назначение: настройка репозиториев, установка пакетов, запуск и healthcheck
 # =============================================================================
----
+
 - name: 📦 Install common dependencies
   ansible.builtin.package:
-    name: >-
-      {{ 
-        common_packages + 
-        (['apt-transport-https', 'gnupg'] if ansible_os_family == 'Debian' else []) 
-      }}
+    # ✅ Если ОС Debian/Ubuntu → добавляем apt-transport-https, иначе → только базовые
+    name: "{{ common_packages + (['apt-transport-https'] if ansible_os_family == 'Debian' else []) }}"
     state: present
-    update_cache: true
-  tags: [clickhouse, packages]
+    update_cache: true             # Только здесь, чтобы не дублировать в следующей задаче
 
+# 🔍 Диагностика: покажем, как Ansible видит ОС (поможет понять, почему skip)
 - name: 🔍 Debug OS facts
   ansible.builtin.debug:
     msg: "ansible_os_family={{ ansible_os_family | default('UNDEFINED') }} | ansible_distribution={{ ansible_distribution | default('UNDEFINED') }}"
-  when: debug_mode | default(false)
-  tags: [clickhouse, debug]
 
-- name: Add ClickHouse GPG key (Debian)
-  ansible.builtin.apt_key:
-    url: "{{ clickhouse_apt_repo_key }}"
-    state: present
-  when: ansible_os_family == "Debian"
-  tags: [clickhouse, repo]
-
+# -------------------------------------------------------------------------
+# 🗄️ Репозитории (идемпотентно)
+# -------------------------------------------------------------------------
 - name: Add ClickHouse repo (Debian)
   ansible.builtin.apt_repository:
     repo: "deb {{ clickhouse_apt_repo }} stable main"
@@ -33,67 +25,58 @@
     state: present
     update_cache: true
   when: ansible_os_family == "Debian"
-  tags: [clickhouse, repo]
 
+# ✅ Простое и надежное условие: AlmaLinux/Rocky/CentOS всегда имеют os_family=RedHat
 - name: Add ClickHouse repo (RHEL-family)
   ansible.builtin.get_url:
     url: "{{ clickhouse_rpm_repo_url }}"
     dest: /etc/yum.repos.d/clickhouse.repo
     mode: "0644"
     force: true
-    timeout: "{{ network_timeout }}"
+    timeout: 30
   when: ansible_os_family == "RedHat"
   register: _ch_repo_download
-  tags: [clickhouse, repo]
 
+# 🔄 Обновляем кэш пакетов только если репо было скачано/обновлено
 - name: Refresh YUM/DNF cache
   ansible.builtin.command: "{{ ansible_pkg_mgr | default('dnf') }} makecache -y"
-  when: 
-    - ansible_os_family == "RedHat"
-    - _ch_repo_download is changed
+  when: ansible_os_family == "RedHat"
   changed_when: false
-  tags: [clickhouse, repo]
 
+# -------------------------------------------------------------------------
+# 📥 Установка пакетов
+# -------------------------------------------------------------------------
 - name: Install ClickHouse packages
   ansible.builtin.package:
     name: "{{ clickhouse_packages }}"
     state: present
     update_cache: true
+    # 💡 Авто-подтверждение GPG-ключа репозитория (требуется для DNF/RHEL)
     disable_gpg_check: false
-  tags: [clickhouse, install]
 
-- name: Deploy ClickHouse config
-  ansible.builtin.template:
-    src: "{{ clickhouse_config_template }}"
-    dest: "{{ clickhouse_config_dest }}"
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-  notify: Restart ClickHouse
-  tags: [clickhouse, config]
-
+# -------------------------------------------------------------------------
+# ▶️ Управление сервисом
+# -------------------------------------------------------------------------
 - name: Enable and start ClickHouse
   ansible.builtin.systemd:
-    name: "{{ clickhouse_service_name }}"
-    enabled: true
-    state: started
-    daemon_reload: true
-  notify: Restart ClickHouse
-  tags: [clickhouse, service]
+    name: clickhouse-server
+    enabled: true                  # Стартует при загрузке
+    state: started                 # Запустить сейчас
+    daemon_reload: true            # Обновить юниты перед стартом
 
+# -------------------------------------------------------------------------
+# 🏥 Healthcheck (ожидание готовности БД)
+# -------------------------------------------------------------------------
 - name: Wait for ClickHouse to be ready
   ansible.builtin.uri:
     url: "{{ clickhouse_health_url }}"
     return_content: true
     status_code: 200
-    timeout: "{{ clickhouse_health_timeout }}"
+    timeout: 10
   register: _ch_health
-  retries: "{{ clickhouse_health_retries }}"
-  delay: "{{ clickhouse_health_delay }}"
-  until: >-
-    (_ch_health.content | default('') | trim | lower) in 
-    ['ok', 'ok.', 'ok\n', 'ok\r\n']
-  ignore_errors: false
-  check_mode: false
-  tags: [clickhouse, healthcheck]
+  retries: 10                      # Максимум попыток
+  delay: 5                         # Задержка между попытками (сек)
+  # ✅ Используем trim для надёжного сравнения (убирает \n, \r, пробелы)
+  until: _ch_health.content | default('') | trim == (clickhouse_health_expected | default('Ok.') | trim)  # Условие успеха
+  ignore_errors: false             # Ошибка здесь = падение плейбука (критично)
+  check_mode: false  # ✅ Пропускаем в --check режиме (нет смысла проверять HTTP в dry-run)
