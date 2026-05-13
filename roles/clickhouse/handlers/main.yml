@@ -1,7 +1,0 @@
----
-# Перезапуск только при изменениях
-- name: restart clickhouse
-  ansible.builtin.systemd:
-    name: "{{ clickhouse_service_name }}"
-    state: restarted
-    daemon_reload: true

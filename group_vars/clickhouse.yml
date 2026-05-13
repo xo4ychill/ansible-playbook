@@ -6,6 +6,7 @@
 # 📦 Репозитории (идемпотентные)
 clickhouse_apt_repo: "https://packages.clickhouse.com/deb"
 clickhouse_rpm_repo_url: "https://packages.clickhouse.com/rpm/clickhouse.repo"
+clickhouse_repo_key: "https://packages.clickhouse.com/rpm/stable/repodata/repomd.xml.key"
 
 # 📦 Пакеты для установки
 clickhouse_packages:

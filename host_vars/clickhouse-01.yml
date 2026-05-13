@@ -4,9 +4,9 @@
 # =============================================================================
 
 # 🌐 Единственное место в проекте, где хранится IP. Легко менять при миграции.
-ch_host_ip: "111.88.243.158"
+ch_host_ip: "111.88.244.167"
 
 # 🐧 Явное указание семейства ОС (полезно при работе с legacy или нестандартными образами)
-ansible_os_family: "RedHat"
-ansible_distribution: "AlmaLinux"
-ansible_distribution_version: "9"
+# ansible_os_family: "RedHat"
+# ansible_distribution: "AlmaLinux"
+# ansible_distribution_version: "9"

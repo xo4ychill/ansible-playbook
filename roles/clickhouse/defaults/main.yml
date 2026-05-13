@@ -1,7 +1,0 @@
----
-clickhouse_packages:
-  - clickhouse-server
-  - clickhouse-client
-
-clickhouse_repo_rpm: https://packages.clickhouse.com/rpm/clickhouse.repo
-clickhouse_apt_repo: "deb https://packages.clickhouse.com/deb stable main"
