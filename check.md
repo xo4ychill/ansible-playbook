@@ -1,3 +1,4 @@
+```bash
 # 1. Проверка синтаксиса
 ansible-playbook site.yml --syntax-check
 
@@ -13,3 +14,4 @@ ansible-playbook site.yml --ask-vault-pass
 # 5. Запуск по тегам
 ansible-playbook site.yml --tags clickhouse
 ansible-playbook site.yml --tags vector,lighthouse
+```
