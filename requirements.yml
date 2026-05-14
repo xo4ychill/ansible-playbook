@@ -22,11 +22,11 @@ roles:
   # Vector role
   - src: git@github.com:xo4ychill/vector-role.git
     scm: git
-    version: "1.0.1"
+    version: "1.0.0"
     name: vector
 
   # Lighthouse role
   - src: git@github.com:xo4ychill/lighthouse-role.git
     scm: git
-    version: "1.0.1"
+    version: "1.0.0"
     name: lighthouse
