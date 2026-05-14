@@ -1,5 +1,8 @@
+# =============================================================================
+# roles/system_tuning/meta/main.yml
+# =============================================================================
 ---
-# Метаданные роли: зависимости, платформы, авторство
+
 galaxy_info:
   author: DevOps Team
   description: System tuning for low-memory VMs (swap, OOM, systemd limits)

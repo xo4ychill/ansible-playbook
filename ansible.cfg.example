@@ -33,9 +33,12 @@ fact_caching_timeout = 3600
 
 # 📝 Вывод и логирование
 
-stdout_callback = default
+# Активация таймеров
+callback_whitelist = profile_roles, profile_tasks, timer
+
 # Читаемый YAML-вывод вместо стандартного
-# stdout_callback = yaml
+stdout_callback = default
+callback_result_format = yaml
 
 # Включает каллбэки для бинарного вывода
 bin_ansible_callbacks = True
@@ -57,6 +60,21 @@ strategy = linear
 
 # Скрипт для ввода пароля Vault
 # vault_identity_list = default@~/.ssh/ask_vault_pass.sh
+
+[colors]
+highlight = white
+verbose = blue
+warn = bright purple
+error = red
+debug = dark gray
+deprecate = yellow
+skip = cyan
+unreachable = red
+ok = green
+changed = yellow
+diff_add = green
+diff_remove = red
+diff_lines = cyan
 
 [privilege_escalation]
 # ⬆️ Настройки привилегированного доступа (sudo)

@@ -59,4 +59,3 @@ vector_clickhouse_password: "{{ lookup('env', 'CLICKHOUSE_PASSWORD') | default('
 vector_batch_max_events: 5000        # Отправлять батч после N событий
 vector_batch_timeout_secs: 2         # Или через N секунд
 vector_output_path: "{{ vector_log_dir }}/output.log"  # Fallback для отладки
-
