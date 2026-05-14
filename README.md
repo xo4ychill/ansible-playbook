@@ -58,20 +58,22 @@
 
 ## 🏗️ Архитектура
 
+```
 ┌─────────────────────────────────────────────────┐
-│ Ansible Controller │
-│ • site.yml (orchestrator) │
-│ • group_vars/, host_vars/ (конфигурация) │
-│ • roles/ (bootstrap, system_tuning, ...) │
+│ Ansible Controller                              │
+│ • site.yml (orchestrator)                       │
+│ • group_vars/, host_vars/ (конфигурация)        │
+│ • roles/ (bootstrap, system_tuning, ...)        │
 └─────────────────┬───────────────────────────────┘
 │ SSH (key-based)
 ▼
 ┌─────────────────────────────────────────────────┐
-│ Inventory │
-│ • clickhouse: AlmaLinux/Rocky/CentOS (БД) │
-│ • vector: Ubuntu (агент сбора) │
-│ • lighthouse: Debian (веб-интерфейс) │
+│ Inventory                                       │
+│ • clickhouse: AlmaLinux/Rocky/CentOS (БД)       │
+│ • vector: Ubuntu (агент сбора)                  │
+│ • lighthouse: Debian (веб-интерфейс)            │
 └─────────────────────────────────────────────────┘
+```
 
 ### Поток данных
 
