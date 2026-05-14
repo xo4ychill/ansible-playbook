@@ -37,7 +37,7 @@
   become: true
   gather_facts: true
   roles:
-    - role: vector-role
+    - role: vector
       tags: [vector, agent]
 
 - name: 🌐 Deploy Lighthouse UI
@@ -45,5 +45,5 @@
   become: true
   gather_facts: true
   roles:
-    - role: lighthouse-role
+    - role: lighthouse
       tags: [lighthouse, ui]
